@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test WebSocket</title>
+</head>
+<body>
+<h1>Chat using WebSocket</h1>
+<input type="text" id="messageInput" placeholder="Votre message">
+<button onclick="sendMessage()">Envoyer</button>
+<div id="messages"></div>
+
+<script>
+    const ws = new WebSocket('ws://localhost:8080/ws');
+
+    ws.onopen = () => {
+        console.log('✅ Connecté');
+        addMessage('Connecté au serveur');
+    };
+
+    ws.onmessage = (event) => {
+        console.log('📨 Reçu:', event.data);
+        addMessage('Echo: ' + event.data);
+    };
+
+    ws.onerror = (error) => {
+        console.log('❌ Erreur:', error);
+    };
+
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const message = input.value;
+        ws.send(message);
+        addMessage('Vous: ' + message);
+        input.value = '';
+    }
+
+    function addMessage(text) {
+        const div = document.getElementById('messages');
+        div.innerHTML += '<p>' + text + '</p>';
+    }
+</script>
+</body>
+</html>
