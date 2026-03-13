@@ -1,43 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Test WebSocket</title>
 </head>
 <body>
 <h1>Chat using WebSocket</h1>
-<input type="text" id="messageInput" placeholder="Votre message">
-<button onclick="sendMessage()">Envoyer</button>
+<p><strong>Mon clientId:</strong> <span id="myId">?</span></p>
+<div style="margin-bottom: 12px;">
+    <input type="text" id="messageInput" placeholder="Votre message">
+    <button onclick="sendBroadcast()">Envoyer (broadcast)</button>
+</div>
+<div style="margin-bottom: 12px;">
+    <label>Envoyer à (clientId): </label>
+    <select id="targetSelect"></select>
+    <input type="text" id="dmInput" placeholder="Message privé">
+    <button onclick="sendDM()">Envoyer (DM)</button>
+</div>
 <div id="messages"></div>
-
 <script>
     const ws = new WebSocket('ws://localhost:8080/ws');
-
+    let myId = null;
     ws.onopen = () => {
         console.log('✅ Connecté');
         addMessage('Connecté au serveur');
     };
-
     ws.onmessage = (event) => {
         console.log('📨 Reçu:', event.data);
-        addMessage('Echo: ' + event.data);
+        let msg;
+        try {
+            msg = JSON.parse(event.data);
+        } catch (e) {
+            addMessage('Reçu (texte): ' + event.data);
+            return;
+        }
+        if (msg.type === 'welcome') {
+            myId = msg.id;
+            document.getElementById('myId').textContent = myId;
+            addMessage('Bienvenue, votre id = ' + myId);
+            return;
+        }
+        if (msg.type === 'clients') {
+            updateClientsList(msg.list || []);
+            return;
+        }
+        if (msg.type === 'broadcast') {
+            addMessage('[BROADCAST] ' + msg.from + ': ' + msg.text);
+            return;
+        }
+        if (msg.type === 'dm') {
+// Si je suis l'émetteur, on l'affiche comme "moi -> X"
+            if (msg.from === myId) {
+                addMessage('[DM] Vous -> ' + msg.to + ': ' + msg.text);
+            } else {
+                addMessage('[DM] ' + msg.from + ' -> Vous: ' + msg.text);
+            }
+            return;
+        }
+        if (msg.type === 'error') {
+            addMessage('❌ Erreur: ' + msg.text);
+            return;
+        }
+        addMessage('Message inconnu: ' + event.data);
     };
-
     ws.onerror = (error) => {
         console.log('❌ Erreur:', error);
     };
-
-    function sendMessage() {
+    function sendBroadcast() {
         const input = document.getElementById('messageInput');
-        const message = input.value;
-        ws.send(message);
-        addMessage('Vous: ' + message);
+        const text = input.value.trim();
+        if (!text) return;
+        ws.send(JSON.stringify({ type: "broadcast", text }));
         input.value = '';
     }
-
+    function sendDM() {
+        const target = document.getElementById('targetSelect').value;
+        const input = document.getElementById('dmInput');
+        const text = input.value.trim();
+        if (!target || !text) return;
+        ws.send(JSON.stringify({ type: "dm", to: target, text }));
+        input.value = '';
+    }
+    function updateClientsList(list) {
+        const sel = document.getElementById('targetSelect');
+        sel.innerHTML = '';
+// Filtra para no mandarte a ti mismo (si quieres permitirlo, quita esta condición)
+        list.filter(id => id !== myId).forEach(id => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = id;
+            sel.appendChild(opt);
+        });
+        if (sel.options.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '(aucun autre client)';
+            sel.appendChild(opt);
+        }
+    }
     function addMessage(text) {
         const div = document.getElementById('messages');
-        div.innerHTML += '<p>' + text + '</p>';
+        div.innerHTML += '<p>' + escapeHtml(text) + '</p>';
+    }
+    function escapeHtml(str) {
+        return str
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
     }
 </script>
 </body>
